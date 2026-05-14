@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Compliance Tracker</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Hidden file input -->
+<input type="file" id="file-input" accept=".csv" style="display:none">
+
+<!-- Shared datalist for compliancy suggestions -->
+<datalist id="compliancy-options"></datalist>
+
+<!-- Export filename modal -->
+<div class="modal-backdrop" id="export-modal-backdrop">
+  <div class="modal">
+    <h2>Export CSV</h2>
+    <p>Enter a filename for the exported file.</p>
+    <input class="filename-input" id="export-filename" type="text" spellcheck="false">
+    <div class="modal-actions" style="margin-top:20px;">
+      <button class="btn-cancel" id="btn-export-cancel">Cancel</button>
+      <button class="btn-confirm-export" id="btn-export-confirm">Export</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm clear modal -->
+<div class="modal-backdrop" id="modal-backdrop">
+  <div class="modal">
+    <div class="modal-icon">&#9888;</div>
+    <h2>Clear compliancy suggestions?</h2>
+    <p>This will remove all saved compliancy values and reset every card's compliancy field to empty.</p>
+    <div class="modal-warning">
+      Any compliancy values you have set during this session that have not been exported to a CSV file will be permanently lost and cannot be recovered.
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="btn-modal-cancel">Cancel</button>
+      <button class="btn-confirm-clear" id="btn-modal-confirm">Clear all</button>
+    </div>
+  </div>
+</div>
+
+<!-- Sidebar -->
+<aside>
+  <div class="sidebar-logo">
+    <h1>Compliance Tracker</h1>
+    <p>requirements review tool</p>
+  </div>
+
+  <div class="sidebar-actions">
+    <button class="sidebar-btn sb-import" id="btn-import">&#8593; Import CSV</button>
+    <button class="sidebar-btn sb-export" id="btn-export" disabled>&#8595; Export CSV</button>
+    <button class="sidebar-btn sb-clear" id="btn-clear" disabled>&#10005; Clear suggestions</button>
+  </div>
+
+  <div class="sidebar-stats">
+    <h2>Summary</h2>
+    <div class="stat-row">
+      <span class="stat-label"><span class="stat-dot dot-c"></span> Compliant</span>
+      <span class="stat-count" id="stat-c">0</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label"><span class="stat-dot dot-nc"></span> Non-Compliant</span>
+      <span class="stat-count" id="stat-nc">0</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label"><span class="stat-dot dot-p"></span> Partial</span>
+      <span class="stat-count" id="stat-p">0</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label"><span class="stat-dot dot-na"></span> N/A</span>
+      <span class="stat-count" id="stat-na">0</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label"><span class="stat-dot dot-other"></span> Other</span>
+      <span class="stat-count" id="stat-other">0</span>
+    </div>
+  </div>
+
+  <div class="sidebar-filter">
+    <h2>Filter</h2>
+    <div class="filter-item active" data-filter="all">
+      <span class="filter-dot filter-dot-all"></span>
+      <span class="filter-label">All (0)</span>
+    </div>
+    <div class="filter-item" data-filter="compliant">
+      <span class="filter-dot filter-dot-c"></span>
+      <span class="filter-label">Compliant (0)</span>
+    </div>
+    <div class="filter-item" data-filter="non-compliant">
+      <span class="filter-dot filter-dot-nc"></span>
+      <span class="filter-label">Non-Compliant (0)</span>
+    </div>
+    <div class="filter-item" data-filter="partial">
+      <span class="filter-dot filter-dot-p"></span>
+      <span class="filter-label">Partial (0)</span>
+    </div>
+    <div class="filter-item" data-filter="na">
+      <span class="filter-dot filter-dot-na"></span>
+      <span class="filter-label">N/A (0)</span>
+    </div>
+    <div class="filter-item" data-filter="other">
+      <span class="filter-dot filter-dot-other"></span>
+      <span class="filter-label">Other (0)</span>
+    </div>
+    <div class="filter-item" data-filter="no-remarks">
+      <span class="filter-dot filter-dot-nr"></span>
+      <span class="filter-label">No Remarks (0)</span>
+    </div>
+  </div>
+</aside>
+
+<!-- Main -->
+<main>
+  <div class="topbar">
+    <div class="topbar-left">
+      <h2>Requirements</h2>
+      <span class="file-chip" id="file-chip">No file loaded</span>
+    </div>
+    <div class="topbar-right">
+      <select class="acceptance-filter" id="acceptance-filter">
+        <option value="all">Customer Acceptance: All</option>
+        <option value="accepted">Accepted</option>
+        <option value="rejected">Rejected</option>
+        <option value="conditional">Conditional</option>
+        <option value="pending">Pending</option>
+        <option value="other">Other</option>
+      </select>
+      <input class="search-box" id="search-box" type="text" placeholder="Search requirements…">
+    </div>
+  </div>
+
+  <div class="cards-area" id="cards-area">
+    <div class="empty-state">
+      <div class="es-icon">&#128194;</div>
+      <h3>No file loaded</h3>
+      <p>Click "Import CSV" in the sidebar to get started.</p>
+    </div>
+  </div>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
