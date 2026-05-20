@@ -475,6 +475,8 @@ document.getElementById('modal-backdrop').addEventListener('click', function (e)
 
 document.getElementById('acceptance-filter').addEventListener('change', function () {
   activeAcceptanceFilter = this.value;
+  searchQuery = '';
+  document.getElementById('search-box').value = '';
   renderCards();
 });
 
@@ -486,6 +488,8 @@ document.getElementById('search-box').addEventListener('input', function () {
 document.querySelectorAll('.filter-item').forEach(el => {
   el.addEventListener('click', function () {
     activeFilter = this.dataset.filter;
+    searchQuery = '';
+    document.getElementById('search-box').value = '';
     renderFilterLabels();
     renderCards();
   });
