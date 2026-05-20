@@ -4,14 +4,16 @@ A lightweight, browser-based tool for reviewing and tracking software requiremen
 
 ## Features
 
-- Import requirements from a CSV file
+- Import requirements from a CSV file (validates required columns, warns on malformed rows)
 - Set compliance status per requirement (Compliant, Non-Compliant, Partial, N/A)
 - Add internal reviewer remarks
 - View read-only customer feedback and acceptance status
 - Filter by compliance status or customer acceptance
+- Sort by requirement ID or compliance status
 - Search requirements by ID or text
 - Export reviewed requirements back to CSV
 - All edits are saved in browser localStorage and survive re-imports
+- Toast notifications confirm imports and warn on data issues
 
 ## Getting Started
 
@@ -30,7 +32,7 @@ Open `index.html` directly in any modern browser. No build step or server needed
 
 ## CSV Format
 
-The file must be UTF-8 encoded with a header row. Column order does not matter.
+The file must be UTF-8 encoded with a header row. Column order does not matter. The `id` and `requirement` columns are required — import is rejected if either is missing.
 
 | Column | Required | Description |
 |--------|----------|-------------|
@@ -69,11 +71,11 @@ A sample file with 15 requirements is included as `requirements.csv`.
 
 ## Usage
 
-1. Click **Import CSV** in the sidebar and select your requirements file.
+1. Click **Import CSV** in the sidebar and select your requirements file. A toast confirms how many requirements were loaded; filters and sort reset automatically.
 2. For each requirement card, set the **compliancy** status using the input field (autocomplete suggests values already in use).
 3. Add **remarks** in the text area below each requirement.
 4. Use the sidebar filters to focus on specific compliance states (e.g. *Non-Compliant*, *No Remarks*).
-5. Use the top bar to filter by customer acceptance status or search by requirement ID/text.
+5. Use the top bar to filter by customer acceptance, sort by ID or status, or search by requirement ID/text.
 6. Click **Export CSV** to download the full dataset with your assessments.
 
 ### Clear compliancy
@@ -88,6 +90,8 @@ Edits are stored in `localStorage` under two keys:
 |-----|----------|
 | `ct-compliancy` | Compliance status per requirement ID |
 | `ct-remarks` | Reviewer remarks per requirement ID |
+
+Each stored value includes a hash of the requirement text at the time of editing. If the same requirement ID is later reused for different requirement text, the stale edit is discarded and the CSV value is used instead.
 
 Because storage is keyed by requirement ID (not row index), edits are preserved if the CSV is re-imported in a different order. Re-importing also refreshes `customer_remarks` and `customer_acceptance` from the file, since those fields are read-only.
 
