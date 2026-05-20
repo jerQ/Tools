@@ -129,6 +129,13 @@
         <option value="pending">Pending</option>
         <option value="other">Other</option>
       </select>
+      <select class="acceptance-filter" id="sort-select">
+        <option value="none">Sort: Default</option>
+        <option value="id-asc">ID: A → Z</option>
+        <option value="id-desc">ID: Z → A</option>
+        <option value="status-asc">Status: A → Z</option>
+        <option value="status-desc">Status: Z → A</option>
+      </select>
       <input class="search-box" id="search-box" type="text" placeholder="Search requirements…">
     </div>
   </div>
@@ -142,6 +149,7 @@
   </div>
 </main>
 
+<div id="toast-container"></div>
 <script src="app.js"></script>
 </body>
 </html>

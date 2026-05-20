@@ -5,6 +5,7 @@ let rows = [];   // [{ id, requirement, compliancy, remarks, customer_remarks, c
 let activeFilter           = 'all';
 let activeAcceptanceFilter = 'all';
 let searchQuery            = '';
+let sortOrder              = 'none';
 let fileName               = '';
 
 // ── Storage ────────────────────────────────────────────────────────────────
@@ -67,16 +68,26 @@ function parseCSV(text) {
   return result;
 }
 
+const REQUIRED_HEADERS = ['id', 'requirement'];
+
 // Converts the raw 2D array from parseCSV into objects keyed by lowercased
 // header names, making column order irrelevant for downstream consumers.
+// Returns { objects, warnings } where warnings lists rows with column mismatches.
 function csvToObjects(parsed) {
-  if (parsed.length < 2) return [];
-  const headers = parsed[0].map(h => h.trim().toLowerCase());
-  return parsed.slice(1).map(cols => {
+  if (parsed.length < 2) return { objects: [], warnings: [] };
+  const headers  = parsed[0].map(h => h.trim().toLowerCase());
+  const missing  = REQUIRED_HEADERS.filter(h => !headers.includes(h));
+  if (missing.length > 0) return { objects: null, missing };
+
+  const warnings = [];
+  const objects  = parsed.slice(1).map((cols, i) => {
+    if (cols.length !== headers.length)
+      warnings.push(`Row ${i + 2}: expected ${headers.length} columns, got ${cols.length}`);
     const obj = {};
-    headers.forEach((h, i) => { obj[h] = (cols[i] ?? '').trim(); });
+    headers.forEach((h, j) => { obj[h] = (cols[j] ?? '').trim(); });
     return obj;
   });
+  return { objects, warnings };
 }
 
 // ── Import ─────────────────────────────────────────────────────────────────
@@ -87,7 +98,13 @@ document.getElementById('file-input').addEventListener('change', function (e) {
 
   const reader = new FileReader();
   reader.onload = function (evt) {
-    const objects    = csvToObjects(parseCSV(evt.target.result));
+    const { objects, warnings, missing } = csvToObjects(parseCSV(evt.target.result));
+
+    if (objects === null) {
+      showToast(`Import failed: missing required columns: ${missing.join(', ')}`);
+      return;
+    }
+
     const storedRem  = loadStoredRemarks();
     const storedComp = loadStoredCompliancy();
 
@@ -105,6 +122,10 @@ document.getElementById('file-input').addEventListener('change', function (e) {
     }));
 
     render();
+
+    let summary = `Loaded ${rows.length} requirement${rows.length !== 1 ? 's' : ''} from ${fileName}`;
+    if (warnings.length > 0) summary += ` — ${warnings.length} row(s) had column mismatches`;
+    showToast(summary);
   };
 
   reader.readAsText(file);
@@ -220,6 +241,13 @@ function visibleRows() {
     }
     return true;
   });
+
+  if (sortOrder === 'id-asc')      result.sort((a, b) => a.id.localeCompare(b.id));
+  else if (sortOrder === 'id-desc') result.sort((a, b) => b.id.localeCompare(a.id));
+  else if (sortOrder === 'status-asc')  result.sort((a, b) => compliancyKey(a.compliancy).localeCompare(compliancyKey(b.compliancy)));
+  else if (sortOrder === 'status-desc') result.sort((a, b) => compliancyKey(b.compliancy).localeCompare(compliancyKey(a.compliancy)));
+
+  return result;
 }
 
 // ── Render ─────────────────────────────────────────────────────────────────
@@ -494,6 +522,24 @@ document.querySelectorAll('.filter-item').forEach(el => {
     renderCards();
   });
 });
+
+document.getElementById('sort-select').addEventListener('change', function () {
+  sortOrder = this.value;
+  renderCards();
+});
+
+// ── Toast ──────────────────────────────────────────────────────────────────
+function showToast(message, duration = 4000) {
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.textContent = message;
+  document.getElementById('toast-container').appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add('visible'));
+  setTimeout(() => {
+    toast.classList.remove('visible');
+    setTimeout(() => toast.remove(), 300);
+  }, duration);
+}
 
 // ── Init ───────────────────────────────────────────────────────────────────
 // Render once on load to put the UI into its correct empty state
