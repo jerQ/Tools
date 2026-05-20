@@ -12,15 +12,25 @@ let fileName               = '';
 // Remarks and compliancy edits are persisted separately so that clearing one
 // does not affect the other. Both are keyed by row id, not array index, so
 // they survive re-imports of reordered or filtered CSV files.
+// Values are stored as { v: value, h: hash } where h is a hash of the
+// requirement text at the time of editing, so stale edits are not applied
+// when the same ID is reused for a different requirement.
 const REMARKS_KEY    = 'ct-remarks';
 const COMPLIANCY_KEY = 'ct-compliancy';
 
+function hashStr(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (Math.imul(31, h) + str.charCodeAt(i)) | 0;
+  return h.toString(36);
+}
+
 function loadStoredRemarks() {
   try { return JSON.parse(localStorage.getItem(REMARKS_KEY) || '{}'); }
-  catch { return {}; }  // Corrupt storage should not break the app
+  catch { return {}; }
 }
-function saveRemark(id, value) {
-  const s = loadStoredRemarks(); s[id] = value;
+function saveRemark(id, value, requirementText) {
+  const s = loadStoredRemarks();
+  s[id] = { v: value, h: hashStr(requirementText) };
   localStorage.setItem(REMARKS_KEY, JSON.stringify(s));
 }
 
@@ -28,9 +38,19 @@ function loadStoredCompliancy() {
   try { return JSON.parse(localStorage.getItem(COMPLIANCY_KEY) || '{}'); }
   catch { return {}; }
 }
-function saveCompliancy(id, value) {
-  const s = loadStoredCompliancy(); s[id] = value;
+function saveCompliancy(id, value, requirementText) {
+  const s = loadStoredCompliancy();
+  s[id] = { v: value, h: hashStr(requirementText) };
   localStorage.setItem(COMPLIANCY_KEY, JSON.stringify(s));
+}
+
+// Restores a stored value only if the requirement text matches the hash stored
+// at edit time. Falls back to the CSV value if the requirement changed.
+// Accepts both old (plain string) and new ({ v, h }) storage formats.
+function restoreStored(stored, csvValue, requirementText) {
+  if (stored === undefined) return csvValue || '';
+  if (typeof stored === 'string') return stored;  // backward compat
+  return stored.h === hashStr(requirementText) ? stored.v : (csvValue || '');
 }
 
 // ── CSV Parser ─────────────────────────────────────────────────────────────
@@ -75,8 +95,8 @@ const REQUIRED_HEADERS = ['id', 'requirement'];
 // Returns { objects, warnings } where warnings lists rows with column mismatches.
 function csvToObjects(parsed) {
   if (parsed.length < 2) return { objects: [], warnings: [] };
-  const headers  = parsed[0].map(h => h.trim().toLowerCase());
-  const missing  = REQUIRED_HEADERS.filter(h => !headers.includes(h));
+  const headers = parsed[0].map(h => h.trim().toLowerCase());
+  const missing = REQUIRED_HEADERS.filter(h => !headers.includes(h));
   if (missing.length > 0) return { objects: null, missing };
 
   const warnings = [];
@@ -110,16 +130,28 @@ document.getElementById('file-input').addEventListener('change', function (e) {
 
     // localStorage takes precedence over CSV for user-editable fields (remarks,
     // compliancy) so that re-importing the original file does not discard edits.
-    // customer_remarks and customer_acceptance are read-only; they always come
-    // from the CSV and are never overridden by local storage.
+    // Stored values are only applied if the requirement text matches the hash
+    // recorded at edit time, preventing stale edits from attaching to a
+    // different requirement that reuses the same ID.
+    // customer_remarks and customer_acceptance are read-only and always come
+    // from the CSV.
     rows = objects.map(obj => ({
       id:                  obj.id                  || '',
       requirement:         obj.requirement         || '',
-      compliancy:          storedComp[obj.id] !== undefined ? storedComp[obj.id] : (obj.compliancy || ''),
-      remarks:             storedRem[obj.id]  !== undefined ? storedRem[obj.id]  : (obj.remarks    || ''),
+      compliancy:          restoreStored(storedComp[obj.id], obj.compliancy, obj.requirement),
+      remarks:             restoreStored(storedRem[obj.id],  obj.remarks,    obj.requirement),
       customer_remarks:    obj.customer_remarks    || '',
       customer_acceptance: obj.customer_acceptance || ''
     }));
+
+    // Reset all filters and sort on new import so the user sees the full dataset
+    activeFilter           = 'all';
+    activeAcceptanceFilter = 'all';
+    searchQuery            = '';
+    sortOrder              = 'none';
+    document.getElementById('acceptance-filter').value = 'all';
+    document.getElementById('sort-select').value       = 'none';
+    document.getElementById('search-box').value        = '';
 
     render();
 
@@ -150,7 +182,7 @@ function downloadCSV(name) {
   const lines  = rows.map(r => [r.id, r.requirement, r.compliancy, r.remarks, r.customer_remarks, r.customer_acceptance].map(csvEscape).join(','));
 
   // Prepend BOM so Excel opens the file as UTF-8 without a manual import wizard
-  const csv  = '\uFEFF' + [header, ...lines].join('\r\n');
+  const csv  = '﻿' + [header, ...lines].join('\r\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url  = URL.createObjectURL(blob);
 
@@ -223,7 +255,7 @@ function updateDatalist() {
 // query. Filtering and searching are AND-combined. visibleRows() is cheap
 // enough to call on every render; no caching is needed at this data size.
 function visibleRows() {
-  return rows.filter(row => {
+  const result = rows.filter(row => {
     const key = compliancyKey(row.compliancy);
     if (activeFilter === 'compliant'     && key !== 'c')     return false;
     if (activeFilter === 'non-compliant' && key !== 'nc')    return false;
@@ -242,8 +274,8 @@ function visibleRows() {
     return true;
   });
 
-  if (sortOrder === 'id-asc')      result.sort((a, b) => a.id.localeCompare(b.id));
-  else if (sortOrder === 'id-desc') result.sort((a, b) => b.id.localeCompare(a.id));
+  if (sortOrder === 'id-asc')           result.sort((a, b) => a.id.localeCompare(b.id));
+  else if (sortOrder === 'id-desc')     result.sort((a, b) => b.id.localeCompare(a.id));
   else if (sortOrder === 'status-asc')  result.sort((a, b) => compliancyKey(a.compliancy).localeCompare(compliancyKey(b.compliancy)));
   else if (sortOrder === 'status-desc') result.sort((a, b) => compliancyKey(b.compliancy).localeCompare(compliancyKey(a.compliancy)));
 
@@ -370,10 +402,12 @@ REQ-002,"Data must be encrypted in transit.",Non-Compliant,"TLS upgrade pending.
   // simple and stateless. The trade-off is that any open textarea loses focus
   // on a full re-render, which is why edits trigger only partial updates
   // (renderStats / renderFilterLabels) rather than a full render() call.
+  // Card event listeners are handled via delegation on #cards-area (see below),
+  // so no per-element listener attachment is needed here.
   area.innerHTML = visible.map(row => {
     const key = compliancyKey(row.compliancy);
     return `
-      <div class="card card-${key}" data-card-id="${escapeHtml(row.id)}">
+      <div class="card card-${key}" data-card-id="${escapeHtml(row.id)}" data-requirement="${escapeHtml(row.requirement)}">
         <div class="card-header">
           <div class="card-meta">
             <span class="card-id">${escapeHtml(row.id)}</span>
@@ -383,7 +417,7 @@ REQ-002,"Data must be encrypted in transit.",Non-Compliant,"TLS upgrade pending.
               data-id="${escapeHtml(row.id)}"
               data-status="${key}"
               value="${escapeHtml(row.compliancy)}"
-              placeholder="Set compliancy\u2026"
+              placeholder="Set compliancy…"
               spellcheck="false"
               autocomplete="off"
             >
@@ -394,7 +428,7 @@ REQ-002,"Data must be encrypted in transit.",Non-Compliant,"TLS upgrade pending.
         <hr class="card-divider">
         <div class="card-footer">
           <label>Remarks</label>
-          <textarea data-id="${escapeHtml(row.id)}" placeholder="Add your remarks\u2026">${escapeHtml(row.remarks)}</textarea>
+          <textarea data-id="${escapeHtml(row.id)}" placeholder="Add your remarks…">${escapeHtml(row.remarks)}</textarea>
         </div>
         ${row.customer_remarks ? `
         <hr class="card-divider">
@@ -404,57 +438,61 @@ REQ-002,"Data must be encrypted in transit.",Non-Compliant,"TLS upgrade pending.
         </div>` : ''}
       </div>`;
   }).join('');
-
-  // Event listeners are attached after innerHTML is set because the elements
-  // did not exist before. Delegation on #cards-area would also work but this
-  // keeps the handler logic co-located with the template.
-  area.querySelectorAll('.compliancy-input').forEach(input => {
-
-    // Update rows[] and datalist on every keystroke so other cards see the
-    // new value as a suggestion immediately, without waiting for a commit.
-    input.addEventListener('input', function () {
-      this.dataset.status = compliancyKey(this.value);
-      const idx = rows.findIndex(r => r.id === this.dataset.id);
-      if (idx !== -1) rows[idx].compliancy = this.value;
-      updateDatalist();
-    });
-
-    // Commit trims the value and persists it. The card's top border colour is
-    // patched in-place rather than re-rendering the whole card to avoid
-    // disrupting any other input that may currently be focused on the page.
-    const commit = function () {
-      const id    = this.dataset.id;
-      const value = this.value.trim();
-      const key   = compliancyKey(value);
-      this.dataset.status = key;
-      const idx = rows.findIndex(r => r.id === id);
-      if (idx !== -1) rows[idx].compliancy = value;
-      saveCompliancy(id, value);
-      const card = document.querySelector(`[data-card-id="${id}"]`);
-      if (card) card.className = `card card-${key}`;
-      renderStats();
-      renderFilterLabels();
-      updateDatalist();
-    };
-    input.addEventListener('blur', commit);
-    // Enter triggers blur rather than duplicating commit logic
-    input.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') { e.preventDefault(); this.blur(); }
-    });
-  });
-
-  area.querySelectorAll('textarea[data-id]').forEach(ta => {
-    ta.addEventListener('input', function () {
-      const id  = this.dataset.id;
-      const idx = rows.findIndex(r => r.id === id);
-      if (idx !== -1) rows[idx].remarks = this.value;
-      saveRemark(id, this.value);
-      // Only filter labels need updating (no-remarks count may change);
-      // stats are compliancy-based and unaffected by remark edits.
-      renderFilterLabels();
-    });
-  });
 }
+
+// ── Card event delegation ──────────────────────────────────────────────────
+// A single set of delegated listeners on #cards-area replaces per-element
+// listeners that were previously re-attached on every renderCards() call.
+const cardsArea = document.getElementById('cards-area');
+
+cardsArea.addEventListener('input', function (e) {
+  const el = e.target;
+
+  if (el.classList.contains('compliancy-input') && el.dataset.id) {
+    el.dataset.status = compliancyKey(el.value);
+    const idx = rows.findIndex(r => r.id === el.dataset.id);
+    if (idx !== -1) rows[idx].compliancy = el.value;
+    updateDatalist();
+  }
+
+  if (el.tagName === 'TEXTAREA' && el.dataset.id) {
+    const id  = el.dataset.id;
+    const idx = rows.findIndex(r => r.id === id);
+    if (idx !== -1) {
+      rows[idx].remarks = el.value;
+      saveRemark(id, el.value, rows[idx].requirement);
+    }
+    renderFilterLabels();
+  }
+});
+
+// focusout bubbles (unlike blur), making delegation straightforward.
+cardsArea.addEventListener('focusout', function (e) {
+  const el = e.target;
+  if (!el.classList.contains('compliancy-input') || !el.dataset.id) return;
+
+  const id    = el.dataset.id;
+  const value = el.value.trim();
+  const key   = compliancyKey(value);
+  el.dataset.status = key;
+  const idx = rows.findIndex(r => r.id === id);
+  if (idx !== -1) {
+    rows[idx].compliancy = value;
+    saveCompliancy(id, value, rows[idx].requirement);
+  }
+  const card = document.querySelector(`[data-card-id="${id}"]`);
+  if (card) card.className = `card card-${key}`;
+  renderStats();
+  renderFilterLabels();
+  updateDatalist();
+});
+
+cardsArea.addEventListener('keydown', function (e) {
+  if (e.target.classList.contains('compliancy-input') && e.key === 'Enter') {
+    e.preventDefault();
+    e.target.blur();
+  }
+});
 
 // ── Event listeners ────────────────────────────────────────────────────────
 // The visible import button proxies to a hidden <input type="file"> to allow
@@ -513,6 +551,7 @@ document.getElementById('search-box').addEventListener('input', function () {
   // Search only affects card visibility, not stats or filter counts
   renderCards();
 });
+
 document.querySelectorAll('.filter-item').forEach(el => {
   el.addEventListener('click', function () {
     activeFilter = this.dataset.filter;
